@@ -1,16 +1,30 @@
 # rag_website_explainer/vector_db_manager.py
-from pinecone import Pinecone, Index, PodSpec, ServerlessSpec
-from typing import List, Dict, Any
-from langchain_community.vectorstores import Pinecone as LangChainPineconeVectorStore
+# Updated import for Pinecone v7+
+from pinecone import Pinecone, PodSpec, ServerlessSpec
+from typing import List, Dict, Any # Keep 'Any' here
+# LangChain's Pinecone integration package
+from langchain_pinecone import PineconeVectorStore as LangChainPineconeVectorStore
 from langchain_core.documents import Document
-from config import PINECONE_API_KEY, PINECONE_ENVIRONMENT, PINECONE_INDEX_NAME, EMBEDDING_DIMENSION
+# Removed explicit import of 'Index' class for type hinting
+# as it is causing persistent ImportError despite correct installation.
+# We will use 'Any' for type hints where 'Index' was used,
+# relying on the runtime object from pc_client.Index(index_name).
+# from pinecone.data import Index # This line is now commented out
+
+# NEW: Import LangChain's SentenceTransformerEmbeddings wrapper
+from langchain_community.embeddings import SentenceTransformerEmbeddings
+
+# Import EMBEDDING_MODEL_NAME directly from config for use here
+from config import PINECONE_API_KEY, PINECONE_ENVIRONMENT, PINECONE_INDEX_NAME, EMBEDDING_DIMENSION, EMBEDDING_MODEL_NAME # Added EMBEDDING_MODEL_NAME
+
 
 def get_pinecone_client():
-    """Initializes and returns a Pinecone client."""
+    """Initializes and returns a Pinecone client for v7+."""
     if not PINECONE_API_KEY or not PINECONE_ENVIRONMENT:
         print("Pinecone API key or environment not set. Cannot connect to Pinecone.")
         return None
     try:
+        # Pinecone v7+ client initialization
         pc = Pinecone(api_key=PINECONE_API_KEY, environment=PINECONE_ENVIRONMENT)
         print("Successfully connected to Pinecone.")
         return pc
@@ -18,16 +32,17 @@ def get_pinecone_client():
         print(f"Error connecting to Pinecone: {e}")
         return None
 
-def create_pinecone_index(pc_client: Pinecone, index_name: str, dimension: int):
-    """Creates a Pinecone index if it doesn't exist."""
-    if index_name in pc_client.list_indexes().names:
+# Changed return type hint from Index to Any
+def create_pinecone_index(pc_client: Pinecone, index_name: str, dimension: int) -> Any:
+    """Creates a Pinecone index if it doesn't exist, compatible with v7+."""
+    # FIX: Call the .names() method to get the list of index names
+    if index_name in pc_client.list_indexes().names():
         print(f"Index '{index_name}' already exists.")
-        # Optional: delete and recreate for clean slate during development
+        # If you need to delete and recreate for development, uncomment these lines:
+        # print(f"Deleting existing index '{index_name}' for recreation.")
         # pc_client.delete_index(index_name)
-        # print(f"Deleted existing index '{index_name}'.")
-        # # Give some time for deletion to propagate if recreating immediately
-        # # import time
-        # # time.sleep(5) 
+        # import time
+        # time.sleep(5) # Give some time for deletion to propagate if recreating immediately
     else:
         print(f"Creating Pinecone index '{index_name}' with dimension {dimension}...")
         # Use ServerlessSpec for the free tier (recommended)
@@ -40,10 +55,13 @@ def create_pinecone_index(pc_client: Pinecone, index_name: str, dimension: int):
             spec=ServerlessSpec(cloud='aws', region='us-east-1') # Adjust as per your Pinecone environment
         )
         print(f"Index '{index_name}' created.")
+    
+    # In Pinecone v7+, you get a handle to the specific index object like this:
     return pc_client.Index(index_name)
 
-def add_documents_to_pinecone(index: Index, documents: List[Document], embedding_model):
-    """Adds documents (with embeddings) to Pinecone."""
+# Changed 'index: Index' type hint to 'index: Any'
+def add_documents_to_pinecone(index: Any, documents: List[Document], embedding_model):
+    """Adds documents (with embeddings) to Pinecone, compatible with v7+."""
     if not documents:
         print("No documents to add to Pinecone.")
         return
@@ -53,10 +71,12 @@ def add_documents_to_pinecone(index: Index, documents: List[Document], embedding
     vectors_to_upsert = []
     for doc in documents:
         # Create a unique ID for each chunk. Ensure IDs are strings.
-        doc_id = f"{doc.metadata.get('source_url', 'unknown_url')}_{doc.metadata.get('chunk_id', 0)}"
+        # It's good practice to hash content or use a UUID for robustness
+        import hashlib
+        doc_id = hashlib.sha256(f"{doc.metadata.get('source_url', '')}_{doc.metadata.get('chunk_id', 0)}_{doc.page_content}".encode()).hexdigest()
+        
         embedding = embedding_model.encode(doc.page_content).tolist()
         
-        # Prepare metadata (Pinecone accepts dictionary for metadata)
         metadata = {
             "text": doc.page_content, # Store original text for retrieval/display
             "source_url": doc.metadata.get("source_url"),
@@ -68,26 +88,33 @@ def add_documents_to_pinecone(index: Index, documents: List[Document], embedding
     for i in range(0, len(vectors_to_upsert), batch_size):
         batch = vectors_to_upsert[i:i+batch_size]
         try:
+            # Upsert method is called directly on the Index object
             index.upsert(vectors=batch)
             print(f"Upserted batch {i//batch_size + 1}/{(len(vectors_to_upsert) + batch_size - 1) // batch_size}")
         except Exception as e:
             print(f"Error upserting batch {i//batch_size + 1}: {e}")
-            # Consider more robust error handling or retries here
             
-    print(f"Finished adding {len(documents)} documents to Pinecone index '{index.name}'.")
+    # FIX: Use PINECONE_INDEX_NAME from config instead of index.name
+    # index.name might not be directly accessible on the runtime Index object
+    from config import PINECONE_INDEX_NAME
+    print(f"Finished adding {len(documents)} documents to Pinecone index '{PINECONE_INDEX_NAME}'.")
 
 def get_pinecone_retriever(pc_client: Pinecone, index_name: str, embedding_model):
-    """Returns a LangChain Pinecone retriever."""
-    # LangChain's PineconeVectorStore requires an embedding function for its operations.
-    # We pass our local SentenceTransformer model's embedding function.
+    """Returns a LangChain Pinecone retriever, compatible with v7+."""
+    # LangChain's PineconeVectorStore now directly takes the Index object.
+    # It will internally use the embedding_model to convert queries to vectors.
     
-    # Note: Ensure the index is created with the correct dimension
-    # before trying to use this retriever.
-    
-    # Initialize the LangChain Pinecone vector store
+    # Ensure the index object is correctly obtained
+    pinecone_index_obj = pc_client.Index(index_name)
+
+    # FIX: Wrap the SentenceTransformer model with LangChain's SentenceTransformerEmbeddings
+    # This provides the .embed_query method that PineconeVectorStore expects.
+    # Use the original EMBEDDING_MODEL_NAME string from config.
+    langchain_embeddings_wrapper = SentenceTransformerEmbeddings(model_name=EMBEDDING_MODEL_NAME) # Changed from embedding_model.model_name
+
     vectorstore = LangChainPineconeVectorStore(
-        index=pc_client.Index(index_name),
-        embedding=embedding_model, # Pass the embedding model directly
+        index=pinecone_index_obj, # Pass the Index object
+        embedding=langchain_embeddings_wrapper, # Pass the wrapped embedding model
         text_key="text" # The key in your metadata that stores the original text
     )
     # Return the vectorstore as a retriever

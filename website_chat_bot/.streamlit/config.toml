@@ -1,0 +1,42 @@
+# .streamlit/config.toml
+
+[theme]
+# Primary accent color (violet)
+primaryColor = "#8A2BE2"  # A beautiful blue-violet
+
+# Background color of the main app area
+backgroundColor = "#1E1E1E" # A deep dark grey
+
+# Background color of sidebar and secondary elements
+secondaryBackgroundColor = "#2D2D2D" # A slightly lighter dark grey
+
+# Color of the text in the app
+textColor = "#FAFAFA" # Almost white, for good contrast
+
+# Font family (optional, defaults to sans serif if not specified)
+# You can use "sans serif", "serif", or "monospace"
+font = "sans serif"
+
+# Base Streamlit theme (dark or light)
+base = "dark"
+
+[global]
+# Enable browser caching for components. Set to false during development if you see caching issues.
+# Suppress the "This app has no widgets" warning if you want.
+# suppressWarningOnEmptyPage = true
+
+[server]
+# The port that the server will listen on for browser connections.
+port = 8501 # Default Streamlit port. You can still override with --server.port 8502 if 8501 is busy.
+
+# Set this to true if you're deploying on a public network and want to disable the warning.
+# headless = true # Uncomment if deploying to a remote server without a browser.
+
+# If you're running this on a network where you need to explicitly allow connections,
+# specify the IP address or hostname.
+# ip = "0.0.0.0" # Allows connections from any IP (useful for Docker/remote hosts)
+
+[client]
+# Whether to show the Streamlit header and footer when in "deployed" mode
+showSidebarNavigation = true # Show sidebar navigation for multi-page apps
+toolbarMode = "minimal" # "developer" or "minimal"
