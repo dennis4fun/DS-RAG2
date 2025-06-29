@@ -117,3 +117,4 @@ Usage
 - Cost: Be mindful of your OpenAI API usage, as costs can accrue based on token usage. Monitor your OpenAI dashboard. Pinecone's free tier has generous limits but also monitor your usage.
 
 - Enjoy building your RAG website explainer!
+- You can use the blueprint for this setup to create your own RAG chat bots related to documents or emails.
