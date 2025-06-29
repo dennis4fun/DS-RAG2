@@ -23,6 +23,8 @@ This project demonstrates a Retrieval-Augmented Generation (RAG) system that all
 ```bash
 website_chat_bot/
 ├── .env                        # Stores API keys (gitignore this!)
+├── .streamlit/                 #hiddent streamlit folder where you can set ui apreance and security config.
+│   └── config.toml             # Ui config toml.
 ├── app.py                      # Streamlit application (main entry point)
 ├── config.py                   # Configuration variables
 ├── web_scraper.py              # Functions for web scraping with Docling
