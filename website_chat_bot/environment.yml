@@ -1,0 +1,19 @@
+name: rag_env
+channels:
+  - conda-forge # A good channel for many scientific Python packages and often better compatibility
+  - defaults
+dependencies:
+  - python=3.10 # Changing to 3.10 as 3.13.15 might be too new for some pre-built wheels
+  - polars
+  - streamlit
+  - pip
+  - pip:
+      - docling-project
+      - langchain>=0.2.0
+      - langchain-openai
+      - langchain-community
+      - langchain-core
+      - pinecone-client
+      - sentence-transformers
+      - python-dotenv
+      - beautifulsoup4
