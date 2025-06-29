@@ -3,18 +3,51 @@ channels:
   - conda-forge
   - defaults
 dependencies:
-  - python=3.10 # Using Python 3.10 for broader package compatibility
-  - polars
-  - streamlit
-  - pip
+  # Python version
+  - python=3.10.18
+
+  # Core data processing & visualization
+  - polars=1.31.0
+  - numpy=2.2.6 # Often a core dependency for data libs
+  - pandas=2.3.0 # Altair often uses pandas internally
+  - altair=5.5.0
+
+  # Web application framework
+  - streamlit=1.46.1
+
+  # Base utility/network packages (from conda list)
+  - requests=2.32.4
+  - certifi=2025.6.15
+  - urllib3=2.5.0
+  - idna=3.10
+  - openssl=3.5.0
+  - pyyaml=6.0.2 # Common for config
+  - click=8.2.1
+  - jinja2=3.1.6 # Streamlit/LangChain dependencies
+  - markupsafe=3.0.2
+  - protobuf=5.29.3 # Common for many ML/API libs
+  - pillow=11.2.1 # Image processing, used by Docling/OCR
+  - setuptools=80.9.0
+  - pip=25.1.1 # Ensures pip is available and at a known version
+
+  # Core Python packages installed via pip
   - pip:
-      - docling
-      - langchain>=0.2.0
-      - langchain-openai
-      - langchain-community
-      - langchain-core
-      - pinecone # Corrected package name for Pinecone client v7+
-      - langchain-pinecone # Explicitly install langchain-pinecone for integration
-      - sentence-transformers
-      - python-dotenv
-      - beautifulsoup4
+      - docling=2.39.0 # Main web scraping library
+      - docling-core=2.39.0 # Docling's core components
+      - docling-ibm-models=3.6.0 # Docling's models
+      - docling-parse=4.1.0 # Docling's parsing components
+      - easyocr=1.7.2 # Dependency for Docling's OCR capabilities
+      - langchain=0.3.26 # Core LangChain framework
+      - langchain-community=0.3.26 # LangChain community integrations
+      - langchain-core=0.3.66 # LangChain core components
+      - langchain-openai=0.3.27 # LangChain integration with OpenAI
+      - langchain-pinecone=0.2.8 # LangChain integration with Pinecone
+      - pinecone=7.3.0 # The modern Pinecone client
+      - sentence-transformers=4.1.0 # Embedding model library
+      - transformers=4.53.0 # Dependency of sentence-transformers
+      - torch=2.7.1 # Deep learning framework, dependency for embeddings/OCR
+      - torchvision=0.22.1 # Dependency for torch
+      - openai=1.93.0 # OpenAI Python client (used by langchain-openai)
+      - python-dotenv=1.1.1 # Environment variable management
+      - beautifulsoup4==4.13.4 # Web parsing, used by Docling
+      - async-timeout==4.0.3 # Explicitly pinned due to previous conflict with langchain
