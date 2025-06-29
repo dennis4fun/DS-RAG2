@@ -1,0 +1,11 @@
+polars
+docling-project
+langchain>=0.2.0
+langchain-openai
+langchain-community
+langchain-core
+pinecone-client
+sentence-transformers
+streamlit
+python-dotenv
+beautifulsoup4
