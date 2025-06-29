@@ -6,6 +6,7 @@ from langchain.chains import create_retrieval_chain
 from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.documents import Document
+import altair as alt # NEW: For data visualizations
 
 # Import functions from our local scripts
 from web_scraper import get_website_content_as_polars_df
@@ -38,22 +39,23 @@ def initialize_components():
         st.error(f"Could not load embedding model: {EMBEDDING_MODEL_NAME}. Check internet connection for download or model name.")
 
     # Initialize Pinecone Client and Index
-    pc_client = get_pinecone_client()
-    pinecone_index = None
+    pc_client = get_pinecone_client() # This now returns the Pinecone client (v7+)
+    pinecone_index_handle = None # This will be the specific Index object
     if pc_client and embedding_model:
         # Create or get the Pinecone index. Ensure dimension matches embedding model.
         try:
-            pinecone_index = create_pinecone_index(pc_client, PINECONE_INDEX_NAME, EMBEDDING_DIMENSION)
+            # create_pinecone_index now returns the specific Index object
+            pinecone_index_handle = create_pinecone_index(pc_client, PINECONE_INDEX_NAME, EMBEDDING_DIMENSION)
             st.success(f"Connected to Pinecone index: '{PINECONE_INDEX_NAME}'")
         except Exception as e:
             st.error(f"Error creating/connecting to Pinecone index: {e}. Check Pinecone environment and API key.")
     elif not pc_client:
         st.error("Pinecone client not initialized. Check PINECONE_API_KEY and PINECONE_ENVIRONMENT in .env.")
     
-    return llm, embedding_model, pc_client, pinecone_index
+    return llm, embedding_model, pc_client, pinecone_index_handle # Return the specific Index object
 
 # Call the initialization function
-llm, embedding_model, pc_client, pinecone_index = initialize_components()
+llm, embedding_model, pc_client, pinecone_index_handle = initialize_components()
 
 # --- Streamlit UI ---
 st.set_page_config(page_title="Website Explainer Chatbot (Pinecone + OpenAI)", layout="wide")
@@ -61,7 +63,7 @@ st.title("🌐 Website Explainer Chatbot")
 st.write("Enter a website URL, load its content, and then ask questions about it!")
 
 # Check if all critical components are initialized
-components_ready = llm and embedding_model and pc_client and pinecone_index
+components_ready = llm and embedding_model and pc_client and pinecone_index_handle
 
 if not components_ready:
     st.warning("Some core components failed to initialize. Please check console for errors and your .env file.")
@@ -83,14 +85,62 @@ if st.button("Load and Process Website"):
             df_content = get_website_content_as_polars_df(website_url)
             if not df_content.is_empty():
                 documents = [
-                    Document(page_content=row["text"], metadata={"source_url": row["source_url"], "chunk_id": row["chunk_id"]})
+                    Document(page_content=row["text"], metadata={
+                        "source_url": row["source_url"],
+                        "chunk_id": row["chunk_id"],
+                        "char_count": row["char_count"], # Add new metadata for visualization
+                        "word_count": row["word_count"] # Add new metadata for visualization
+                    })
                     for row in df_content.iter_rows(named=True)
                 ]
                 try:
-                    add_documents_to_pinecone(pinecone_index, documents, embedding_model)
+                    add_documents_to_pinecone(pinecone_index_handle, documents, embedding_model)
                     st.success(f"Successfully loaded and processed {len(documents)} chunks from {website_url} into Pinecone!")
                     st.session_state.current_website_loaded = website_url
                     st.session_state.messages.append({"role": "assistant", "content": f"I've loaded the content from {website_url}. Ask me anything about it!"})
+
+                    # --- NEW: Display Polars DataFrame Info and Visuals ---
+                    st.subheader("Processed Content Overview")
+                    st.write(f"Total chunks extracted: **{len(df_content)}**")
+                    st.write("First 5 chunks (Polars DataFrame head):")
+                    st.dataframe(df_content.head()) # Display the head of the DataFrame
+
+                    with st.expander("View all extracted chunks"):
+                        for i, row in enumerate(df_content.iter_rows(named=True)):
+                            st.markdown(f"**Chunk {i+1} (ID: {row['chunk_id']}) from {row['source_url']}**")
+                            st.markdown(f"Characters: {row['char_count']}, Words: {row['word_count']}")
+                            st.code(row['text'])
+                            st.markdown("---")
+                    
+                    st.subheader("Chunk Statistics")
+
+                    # Convert Polars DataFrame to Pandas for Altair charting (Altair prefers Pandas)
+                    pandas_df_for_chart = df_content.to_pandas() 
+
+                    # Histogram of chunk character counts
+                    st.write("Distribution of Chunk Lengths (Characters):")
+                    chart_char_count = alt.Chart(pandas_df_for_chart).mark_bar().encode(
+                        alt.X("char_count", bin=alt.Bin(maxbins=20), title="Character Count"),
+                        alt.Y("count()", title="Number of Chunks")
+                    ).properties(
+                        title="Chunk Length Distribution"
+                    )
+                    st.altair_chart(chart_char_count, use_container_width=True)
+
+                    # Summary statistics using Polars' native aggregation
+                    st.write("Summary Statistics for Chunks:")
+                    st.dataframe(df_content.select(
+                        pl.col("char_count").mean().alias("Avg Char Count"),
+                        pl.col("char_count").median().alias("Median Char Count"),
+                        pl.col("char_count").min().alias("Min Char Count"),
+                        pl.col("char_count").max().alias("Max Char Count"),
+                        pl.col("word_count").mean().alias("Avg Word Count"),
+                        pl.col("word_count").median().alias("Median Word Count"),
+                        pl.col("word_count").min().alias("Min Word Count"),
+                        pl.col("word_count").max().alias("Max Word Count")
+                    ))
+                    # --- END NEW ---
+
                 except Exception as e:
                     st.error(f"Failed to add documents to Pinecone: {e}. Ensure your Pinecone index is correctly configured and accessible.")
             else:
@@ -133,15 +183,11 @@ if prompt := st.chat_input("Ask me about the website..."):
             ])
 
             # LangChain RAG Chain
-            # create_stuff_documents_chain combines documents into the prompt
             question_answer_chain = create_stuff_documents_chain(llm, prompt_template)
-            
-            # create_retrieval_chain combines retriever and question_answer_chain
             rag_chain = create_retrieval_chain(retriever, question_answer_chain)
 
             try:
                 with st.spinner("Thinking..."):
-                    # Invoke the RAG chain
                     response = rag_chain.invoke({"input": prompt})
                 
                 assistant_response = response["answer"]

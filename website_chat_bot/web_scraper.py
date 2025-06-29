@@ -10,19 +10,25 @@ def scrape_website_with_docling(url: str) -> List[Dict[str, Any]]:
     """
     converter = DocumentConverter()
     try:
-        # Convert the URL to a document object
         result = converter.convert(url)
         
-        # Export the document content to Markdown for easier text extraction
         markdown_content = result.document.export_to_markdown()
         
         # Simple chunking: Split by double newlines (paragraphs)
-        # For more advanced chunking, LangChain's text splitters are recommended
-        # after getting the full text.
         chunks = [chunk.strip() for chunk in markdown_content.split("\n\n") if chunk.strip()]
         
-        # Create a list of dictionaries with text and metadata
-        data = [{"text": chunk, "source_url": url, "chunk_id": i} for i, chunk in enumerate(chunks)]
+        data = []
+        for i, chunk in enumerate(chunks):
+            chunk_data = {
+                "text": chunk,
+                "source_url": url,
+                "chunk_id": i,
+                "char_count": len(chunk), # NEW: Character count
+                "word_count": len(chunk.split()), # NEW: Simple word count
+                # You could add 'has_table' or 'has_code' if Docling provides such metadata
+                # or if you want to implement simple regex checks here.
+            }
+            data.append(chunk_data)
         return data
     except Exception as e:
         print(f"Error scraping {url}: {e}")
@@ -31,20 +37,37 @@ def scrape_website_with_docling(url: str) -> List[Dict[str, Any]]:
 def get_website_content_as_polars_df(url: str) -> pl.DataFrame:
     """
     Scrapes the website and returns content in a Polars DataFrame.
+    Includes character and word counts for each chunk.
     """
     scraped_data = scrape_website_with_docling(url)
     if scraped_data:
-        return pl.DataFrame(scraped_data)
-    # Return an empty DataFrame with expected schema if no data is scraped
+        # Explicitly cast new columns for robustness
+        return pl.DataFrame(scraped_data).with_columns([
+            pl.col("char_count").cast(pl.UInt32),
+            pl.col("word_count").cast(pl.UInt32)
+        ])
+    # Return an empty DataFrame with expected schema including new columns
     return pl.DataFrame({
         "text": pl.Series(dtype=pl.String),
         "source_url": pl.Series(dtype=pl.String),
-        "chunk_id": pl.Series(dtype=pl.UInt32)
+        "chunk_id": pl.Series(dtype=pl.UInt32),
+        "char_count": pl.Series(dtype=pl.UInt32),
+        "word_count": pl.Series(dtype=pl.UInt32)
     })
 
 if __name__ == "__main__":
-    test_url = "https://docs.pola.rs/py-polars/html/reference/dataframe/index.html" # Example Polars docs page
+    test_url = "https://docs.pola.rs/py-polars/html/reference/dataframe/index.html"
     print(f"Scraping: {test_url}")
     df = get_website_content_as_polars_df(test_url)
     print(df.head())
     print(f"Total chunks: {len(df)}")
+    if not df.is_empty():
+        print("\nChunk Statistics:")
+        print(df.select(
+            pl.col("char_count").mean().alias("Avg Char Count"),
+            pl.col("char_count").median().alias("Median Char Count"),
+            pl.col("char_count").min().alias("Min Char Count"),
+            pl.col("char_count").max().alias("Max Char Count"),
+            pl.col("word_count").mean().alias("Avg Word Count"),
+            pl.col("word_count").median().alias("Median Word Count"),
+        ))
